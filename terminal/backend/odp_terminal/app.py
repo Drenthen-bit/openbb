@@ -187,6 +187,9 @@ def create_app(mode: str | None = None, db_path: str | Path | None = None, start
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         task = None
+        # Import OpenBB on the main thread: its first import builds the package and
+        # installs signal handlers, which fails from the worker threads used later.
+        market.openbb_available()
         if start_background:
             await market.probe()
             task = asyncio.create_task(loop())

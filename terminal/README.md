@@ -20,13 +20,14 @@ an order blotter. It's a full-stack app:
 ## Quick start
 
 ```sh
-# 1. Python environment with the OpenBB Platform (from this repo) and the terminal server
-python openbb_platform/dev_install.py --routers     # or: pip install openbb
-pip install -e "terminal/backend[ai,dev]"
-
-# 2. Build the UI and start the server
-./terminal/run.sh                  # http://127.0.0.1:6901
+python -m venv .venv && source .venv/bin/activate   # Python 3.11–3.13
+./terminal/install.sh      # OpenBB core + key-free providers (editable, from this repo) + terminal server
+./terminal/run.sh          # builds the UI on first run, then serves http://127.0.0.1:6901
 ```
+
+`install.sh` installs only the OpenBB packages the terminal uses. It skips the EIA, BLS, OECD
+and ECB providers because their build steps download catalogs (EIA also needs an
+`EIA_API_KEY`), so `openbb_platform/dev_install.py` fails on a fresh clone without them.
 
 `run.sh` builds the UI on first run (Node 18+). After that, `python -m odp_terminal` or
 `odp-terminal` starts the server directly.

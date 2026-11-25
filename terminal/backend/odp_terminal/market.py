@@ -197,6 +197,7 @@ class MarketData:
                 from openbb import obb  # noqa: PLC0415
 
                 self._obb = obb
+                self.openbb_error = None
             except Exception as exc:  # pragma: no cover - depends on install
                 self.openbb_error = f"OpenBB Platform failed to import: {exc}"
                 raise DataUnavailable(self.openbb_error) from exc
