@@ -1,0 +1,13 @@
+**
+!openbb_platform/core
+!openbb_platform/extensions
+!openbb_platform/providers
+!terminal/backend
+!terminal/frontend
+!terminal/install.sh
+**/node_modules
+**/__pycache__
+**/.venv
+**/tests
+terminal/backend/odp_terminal/static
+**/*.db

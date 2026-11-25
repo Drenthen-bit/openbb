@@ -36,8 +36,48 @@ Options: `--mode auto|live|demo`, `--port`, `--host`, `--db PATH`, and `--no-odp
 the OpenBB REST API). Each option also has an environment variable: `TERMINAL_DATA_MODE`,
 `TERMINAL_PORT`, `TERMINAL_HOST`, `TERMINAL_DB`, `TERMINAL_MOUNT_ODP=0`.
 
-The server has no authentication and binds to `127.0.0.1` by default. Put it behind your own
-auth before you expose it on a network.
+The server binds to `127.0.0.1` by default. On any other address (`--lan` or `--host`) it
+requires an access token. See *Use it on an iPad*.
+
+## Use it on an iPad
+
+The terminal installs on iPad as a home-screen web app: it gets its own icon, opens full-screen
+and has a touch layout. That layout has a ☰ MENU for every function, larger controls, and a
+single-column panel stack in portrait. The data server can't run on iPadOS, so the iPad connects
+to a server running elsewhere. There are two ways to set that up.
+
+**A. On your own computer (same Wi-Fi as the iPad)**
+
+```sh
+./terminal/install.sh
+./terminal/run.sh --lan
+```
+
+`--lan` serves on your local network and requires an access token. If `TERMINAL_TOKEN` isn't
+set, it generates one. It prints the iPad address and a QR code. On the iPad:
+
+1. Scan the QR code with the Camera app and open the link in Safari.
+2. Tap **Share → Add to Home Screen**.
+
+The icon opens the terminal directly. The computer has to be on and running the server while
+you use it.
+
+**B. On a cloud host (works anywhere)**
+
+Build the container from the repository root and run it on any Docker host (Fly.io, Render,
+Railway, a VPS). Use HTTPS and set your own token:
+
+```sh
+docker build -f terminal/Dockerfile -t odp-terminal .
+docker run -p 6901:6901 -e TERMINAL_TOKEN=<long-random-string> -v odp-data:/data odp-terminal
+```
+
+Open `https://<your-host>/?token=<token>` on the iPad, then tap **Share → Add to Home Screen**.
+Watchlists, layouts, trades and alerts are stored in `/data`, so keep that volume.
+
+The token can be sent as a bearer header, a `?token=` query parameter, or a long-lived HttpOnly
+login cookie. The app shows an unlock screen if it doesn't have the token. Home-screen apps on
+iOS keep their own storage, so if the unlock screen appears there, enter the token once.
 
 ### Frontend development
 
@@ -155,7 +195,7 @@ alerts, and records the account's equity once a minute.
 ## Tests
 
 ```sh
-cd terminal/backend && pytest       # 46 tests: demo data, normalization, trading engine, API, WebSocket
+cd terminal/backend && pytest       # 48 tests: demo data, normalization, trading engine, API, WebSocket
 cd terminal/frontend && npm test    # 16 tests: command parser, indicators, formatting
 ```
 
@@ -167,4 +207,4 @@ cd terminal/frontend && npm test    # 16 tests: command parser, indicators, form
 - Live commodities need a FRED API key.
 - The paper-trading engine fills against the top of book (with configurable slippage). It does
   not model partial fills, queue position or market hours.
-- The server is single-user and has no authentication.
+- The server is single-user: one shared access token, no per-user accounts.
