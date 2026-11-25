@@ -6,6 +6,7 @@ const backend = process.env.TERMINAL_BACKEND ?? "http://127.0.0.1:6901";
 
 export default defineConfig({
   plugins: [react()],
+  base: "./",
   build: {
     outDir: "../backend/odp_terminal/static",
     emptyOutDir: true,

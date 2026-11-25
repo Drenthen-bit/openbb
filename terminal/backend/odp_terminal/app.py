@@ -6,14 +6,14 @@ import asyncio
 import json
 import logging
 import os
+import secrets
 import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
 
-from fastapi import Body, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi import Body, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -79,6 +79,10 @@ class ObbIn(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
+class LoginIn(BaseModel):
+    token: str
+
+
 class CredentialIn(BaseModel):
     name: str
     value: str
@@ -107,7 +111,17 @@ class Hub:
         await asyncio.gather(*(self.send(ws, msg) for ws in list(self.clients)))
 
 
-def create_app(mode: str | None = None, db_path: str | Path | None = None, start_background: bool = True) -> FastAPI:
+COOKIE = "odp_terminal_token"
+
+
+def create_app(
+    mode: str | None = None,
+    db_path: str | Path | None = None,
+    start_background: bool = True,
+    token: str | None = None,
+) -> FastAPI:
+    """Build the app. With ``token`` (or TERMINAL_TOKEN) set, every data route requires it."""
+    token = token if token is not None else (os.environ.get("TERMINAL_TOKEN") or None)
     mode = mode or os.environ.get("TERMINAL_DATA_MODE", "auto")
     market = MarketData(mode)
     store = Store(db_path or DEFAULT_DB)
@@ -204,7 +218,54 @@ def create_app(mode: str | None = None, db_path: str | Path | None = None, start
     app.state.store = store
     app.state.engine = engine
     app.state.hub = hub
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    def authorized(cookies, headers, query) -> bool:
+        if not token:
+            return True
+        supplied = cookies.get(COOKIE) or query.get("token") or ""
+        auth = headers.get("authorization", "")
+        if auth.lower().startswith("bearer "):
+            supplied = auth[7:]
+        return secrets.compare_digest(supplied.encode(), token.encode())
+
+    open_paths = ("/terminal/session", "/terminal/login", "/terminal/logout")
+
+    @app.middleware("http")
+    async def require_token(request: Request, call_next):
+        path = request.url.path
+        protected = path.startswith(("/terminal", "/odp")) and path not in open_paths
+        if protected and not authorized(request.cookies, request.headers, request.query_params):
+            return JSONResponse(status_code=401, content={"detail": "access token required"})
+        return await call_next(request)
+
+    @app.get("/terminal/session")
+    async def session(request: Request):
+        return {
+            "auth_required": bool(token),
+            "authenticated": authorized(request.cookies, request.headers, request.query_params),
+        }
+
+    @app.post("/terminal/login")
+    async def login(body: LoginIn, request: Request):
+        if not token:
+            return {"authenticated": True}
+        if not secrets.compare_digest(body.token.strip().encode(), token.encode()):
+            raise HTTPException(401, "wrong access token")
+        resp = JSONResponse({"authenticated": True})
+        resp.set_cookie(
+            COOKIE,
+            token,
+            max_age=365 * 24 * 3600,
+            httponly=True,
+            samesite="strict",
+            secure=request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https",
+        )
+        return resp
+
+    @app.post("/terminal/logout")
+    async def logout():
+        resp = Response(status_code=204)
+        resp.delete_cookie(COOKIE)
+        return resp
 
     @app.exception_handler(DataUnavailable)
     async def _data_unavailable(_, exc: DataUnavailable):
@@ -537,6 +598,9 @@ def create_app(mode: str | None = None, db_path: str | Path | None = None, start
     # ------------------------------------------------------------- websocket
     @app.websocket(f"{api}/ws")
     async def ws_endpoint(ws: WebSocket):
+        if not authorized(ws.cookies, ws.headers, ws.query_params):
+            await ws.close(code=4401)
+            return
         await ws.accept()
         hub.clients[ws] = set()
         await hub.send(ws, {"type": "status", "data": status_payload()})

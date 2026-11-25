@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GridLayout, { WidthProvider, type Layout } from "react-grid-layout";
 import { api, type Status } from "./lib/api";
-import { functionFor, parseCommand, suggest, type Suggestion } from "./lib/commands";
+import { FUNCTIONS, functionFor, parseCommand, suggest, type Suggestion } from "./lib/commands";
 import { useAsync } from "./lib/hooks";
 import { stream, useConnected, useQuotes, useStreamEvents, type StreamEvent } from "./lib/stream";
 import { LINK_GROUPS, focusedGroup, panelSymbol, useWorkspace, type LinkGroup, type PanelState } from "./lib/workspace";
@@ -154,10 +154,13 @@ export default function App() {
   useEffect(() => setMaximized(null), [ws.active]);
   const mainRef = useRef<HTMLElement>(null);
   const rowHeight = useRowHeight(mainRef);
+  const narrow = useNarrow();
+  const [launcher, setLauncher] = useState(false);
 
   return (
     <div className="app">
-      <TopBar run={run} cmdRef={cmdRef} status={status} />
+      <TopBar run={run} cmdRef={cmdRef} status={status} onMenu={() => setLauncher(true)} />
+      {launcher && <Launcher run={run} onClose={() => setLauncher(false)} />}
       <TickerTape run={run} />
       <div className="pages">
         {ws.pages.map((p, i) => (
@@ -172,6 +175,19 @@ export default function App() {
             title="Double-click to rename"
           >
             <span className="page-num">{i + 1}</span> {p.name}
+            {i === ws.active && (
+              <span
+                className="page-x"
+                title="Rename page"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const name = prompt("Rename page", p.name);
+                  if (name) dispatch({ t: "renamePage", index: i, name });
+                }}
+              >
+                ✎
+              </span>
+            )}
             {ws.pages.length > 1 && i === ws.active && (
               <span
                 className="page-x"
@@ -194,12 +210,25 @@ export default function App() {
       <main className="workspace" ref={mainRef}>
         {page.panels.length === 0 && (
           <div className="state big-empty">
-            Empty page. Type a function in the command line — e.g. <kbd>AAPL GP</kbd>, <kbd>WEI</kbd>, <kbd>HELP</kbd>.
+            Empty page. Type a function in the command line — e.g. <kbd>AAPL GP</kbd>, <kbd>WEI</kbd>, <kbd>HELP</kbd> — or
+            <button className="btn" onClick={() => setLauncher(true)}>
+              open the function menu
+            </button>
           </div>
         )}
         {maximized && page.panels.find((p) => p.id === maximized) ? (
           <div className="maximized">
             <PanelFrame panel={page.panels.find((p) => p.id === maximized)!} run={run} maximized onMaximize={() => setMaximized(null)} />
+          </div>
+        ) : narrow ? (
+          <div className="stack">
+            {[...page.panels]
+              .sort((a, b) => a.y - b.y || a.x - b.x)
+              .map((p) => (
+                <div key={p.id} className="stack-item" style={{ height: Math.max(340, p.h * 34) }}>
+                  <PanelFrame panel={p} run={run} onMaximize={() => setMaximized(p.id)} />
+                </div>
+              ))}
           </div>
         ) : (
           <Grid
@@ -229,6 +258,63 @@ export default function App() {
             {t.text}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** True when the viewport is too narrow for the 12-column grid (e.g. iPad portrait). */
+function useNarrow() {
+  const query = "(max-width: 899px)";
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return narrow;
+}
+
+/** Touch-friendly function menu: every function as a large button, grouped by category. */
+function Launcher({ run, onClose }: { run: (s: string) => Promise<boolean>; onClose: () => void }) {
+  const { ws } = useWorkspace();
+  const group = focusedGroup(ws);
+  const [sym, setSym] = useState(ws.links[group]);
+  const cats = [...new Set(FUNCTIONS.map((f) => f.category))];
+  const open = (mnemonic: string, needsSymbol: boolean) => {
+    run(needsSymbol && sym ? `${sym} ${mnemonic}` : mnemonic);
+    onClose();
+  };
+  return (
+    <div className="launcher-backdrop" onClick={onClose}>
+      <div className="launcher" onClick={(e) => e.stopPropagation()}>
+        <div className="launcher-head">
+          <span className="accent">FUNCTIONS</span>
+          <label className="muted">
+            Security <input className="input" value={sym} onChange={(e) => setSym(e.target.value.toUpperCase())} style={{ width: 110 }} />
+          </label>
+          <span className="grow" />
+          <button className="btn" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="scroll">
+          {cats.map((c) => (
+            <div key={c}>
+              <h3>{c}</h3>
+              <div className="launcher-grid">
+                {FUNCTIONS.filter((f) => f.category === c).map((f) => (
+                  <button key={f.type} className="launcher-btn" onClick={() => open(f.mnemonics[0], f.needsSymbol)}>
+                    <span className="accent">{f.mnemonics[0]}</span>
+                    <span>{f.title}</span>
+                    <span className="muted small">{f.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -328,7 +414,7 @@ const PanelFrame = memo(function PanelFrame({ panel, run, maximized, onMaximize 
 });
 
 // ---------------------------------------------------------------- top bar & command line
-function TopBar({ run, cmdRef, status }: { run: (s: string) => Promise<boolean>; cmdRef: React.RefObject<HTMLInputElement>; status: Status | null }) {
+function TopBar({ run, cmdRef, status, onMenu }: { run: (s: string) => Promise<boolean>; cmdRef: React.RefObject<HTMLInputElement>; status: Status | null; onMenu: () => void }) {
   const { ws } = useWorkspace();
   const [value, setValue] = useState("");
   const [sel, setSel] = useState(0);
@@ -376,6 +462,9 @@ function TopBar({ run, cmdRef, status }: { run: (s: string) => Promise<boolean>;
 
   return (
     <div className="topbar">
+      <button className="menu-btn" onClick={onMenu} title="Function menu">
+        ☰ <span className="menu-label">MENU</span>
+      </button>
       <div className="brand" title="ODP Terminal — built on the OpenBB Open Data Platform">
         <span className="brand-mark">ODP</span> TERMINAL
       </div>

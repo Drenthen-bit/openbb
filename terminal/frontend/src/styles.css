@@ -314,7 +314,47 @@ select.input { padding: 2px 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #2a2f38; border-radius: 4px; }
 
+/* ---------------------------------------------------------------- menu / launcher */
+.menu-btn { background: #1b2028; color: var(--accent); border: 1px solid var(--border); border-radius: 2px; font: inherit; font-weight: 700; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
+.launcher-backdrop { position: fixed; inset: 0; background: #000c; z-index: 1500; display: flex; align-items: flex-start; justify-content: center; padding: max(20px, env(safe-area-inset-top)) 16px 20px; }
+.launcher { width: min(980px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--accent); border-radius: 4px; }
+.launcher-head { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.launcher .scroll { padding: 0 12px 12px; }
+.launcher-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.launcher-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; background: var(--panel-2); border: 1px solid var(--border); border-radius: 3px; color: var(--text); font: inherit; padding: 10px; cursor: pointer; min-height: 64px; }
+.launcher-btn:hover, .launcher-btn:active { border-color: var(--accent); }
+
+/* ---------------------------------------------------------------- narrow / stacked layout */
+.stack { display: flex; flex-direction: column; gap: 6px; padding: 6px; }
+.stack-item { flex: none; }
+
+/* ---------------------------------------------------------------- iPad / touch */
+html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+.app { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+@media (pointer: coarse) {
+  /* 16px inputs stop iOS from zooming the page on focus */
+  .input, .cmd-input, .link-input, textarea, select { font-size: 16px; }
+  .btn, .seg-btn, .tab, .page-tab { min-height: 36px; padding-left: 12px; padding-right: 12px; }
+  .seg-btn { font-size: 13px; }
+  .icon-btn { font-size: 20px; padding: 4px 10px; }
+  .link-dot { width: 28px; height: 28px; font-size: 12px; }
+  .panel-head { min-height: 38px; }
+  .panel-sym { padding: 4px 10px; }
+  .tbl td { padding: 6px 8px; }
+  .react-resizable-handle { width: 28px !important; height: 28px !important; opacity: 0.8; }
+  .tape-inner { animation-duration: 110s; }
+  .cmd-go { padding: 10px 16px; }
+}
+@media (max-width: 1100px) {
+  .clock span.muted { display: none; }
+}
 @media (max-width: 900px) {
   .clock, .linkbar { display: none; }
   .brand { display: none; }
+  .menu-label { display: none; }
+  .cmd-group { display: none; }
 }
+
+/* ---------------------------------------------------------------- auth */
+.auth { height: 100%; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.auth-box { width: min(380px, 100%); display: flex; flex-direction: column; gap: 12px; padding: 24px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; }

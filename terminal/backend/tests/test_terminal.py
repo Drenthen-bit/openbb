@@ -299,3 +299,28 @@ def test_live_quote_normalization(monkeypatch):
         body = c.get("/terminal/quote?symbols=AAPL").json()
         assert body["source"] == "live" and body["provider"] == "cboe"
         assert body["data"][0]["change_percent"] == pytest.approx(0.25)
+
+
+# ------------------------------------------------------------------ access token
+def test_token_protects_data_routes_and_websocket():
+    app = create_app(mode="demo", db_path=":memory:", start_background=False, token="s3cret")
+    with TestClient(app) as c:
+        assert c.get("/terminal/session").json() == {"auth_required": True, "authenticated": False}
+        assert c.get("/terminal/quote?symbols=AAPL").status_code == 401
+        assert c.get("/terminal/quote?symbols=AAPL", headers={"Authorization": "Bearer nope"}).status_code == 401
+        assert c.get("/terminal/quote?symbols=AAPL", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+        assert c.get("/terminal/quote?symbols=AAPL&token=s3cret").status_code == 200
+        with pytest.raises(Exception):
+            with c.websocket_connect("/terminal/ws") as ws:
+                ws.receive_json()
+        assert c.post("/terminal/login", json={"token": "wrong"}).status_code == 401
+        assert c.post("/terminal/login", json={"token": "s3cret"}).status_code == 200
+        # the login cookie now authorizes REST and WebSocket
+        assert c.get("/terminal/session").json()["authenticated"] is True
+        assert c.get("/terminal/portfolio").status_code == 200
+        with c.websocket_connect("/terminal/ws") as ws:
+            assert ws.receive_json()["type"] == "status"
+
+
+def test_no_token_means_open_access(client):
+    assert client.get("/terminal/session").json() == {"auth_required": False, "authenticated": True}
